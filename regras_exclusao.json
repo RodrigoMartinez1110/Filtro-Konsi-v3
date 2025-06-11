@@ -1,0 +1,29 @@
+{
+  "govsp": {
+    "lotacoes": [
+    ],
+    "vinculos": [
+    ],
+    "secretarias": [
+    ]
+  },
+  "goval": {
+    "lotacoes": [
+    ],
+    "vinculos": [
+    ],
+    "secretarias": [
+    ]
+  },
+  "govmt": {
+    "lotacoes": [
+    ],
+    "vinculos": [],
+    "secretarias": []
+  },
+  "prefsp": {
+    "lotacoes": [
+        "SMG - SP (PMSP)"
+    ]
+  }
+}
