@@ -1,4 +1,4 @@
-# app.py (Versão com Sidebar e Filtro Duplo)
+# app.py (Versão com Expanders na Sidebar e Botão Principal)
 
 import streamlit as st
 import pandas as pd
@@ -65,8 +65,8 @@ def render_bank_config(index: int, campanha: str, base: pd.DataFrame) -> BancoCo
         )
 
 def main():
-    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V3.0')
-    st.title("🚀 Filtro de Campanhas - Konsi V3.0")
+    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V4.3')
+    st.title("🚀 Filtro de Campanhas - Konsi V4.3")
     st.sidebar.header("⚙️ Painel de Controle")
 
     regras_exclusao = carregar_regras_de_exclusao()
@@ -82,70 +82,69 @@ def main():
     st.write("Prévia dos dados carregados:")
     st.dataframe(base.head())
 
-    convenio_atual = base.loc[0, COL_CONVENIO]
+    convenio_atual = base.loc[0, COL_CONVENIO].strip().lower()
     regras_do_convenio = regras_exclusao.get(convenio_atual, {})
 
-    # <<< MUDANÇA: O formulário inteiro agora está na sidebar >>>
-    with st.sidebar.form(key="filtro_form"):
-        st.write("---")
-        st.subheader("1. Configurações Gerais")
-        campanha = st.selectbox("Tipo da Campanha:", list(STRATEGY_MAPEAMENTO.keys()))
-        comissao_minima = st.number_input("Comissão mínima da campanha:", value=0.0)
-        margem_emprestimo_limite = st.number_input("Margem de empréstimo mínima:", value=0.0)
-        idade_max = st.number_input("Idade máxima", 0, 120, 72)
-        
-        equipes = st.selectbox("Equipe da Campanha:", ['outbound', 'csapp', 'csativacao', 'cscdx', 'csport', 'outbound_virada'])
-        convai = st.slider("Porcentagem para IA (%)", 0.0, 100.0, 0.0, 1.0)
-        
-        st.write("---")
-        st.subheader("2. Filtros de Exclusão")
+    # --- INÍCIO DA SIDEBAR ---
+    
+    # <<< MUDANÇA: Usando st.expander para organização >>>
+    with st.sidebar.expander("1. Configurações Gerais", expanded=True):
+        campanha = st.selectbox("Tipo da Campanha:", list(STRATEGY_MAPEAMENTO.keys()), key="campanha")
+        comissao_minima = st.number_input("Comissão mínima da campanha:", value=0.0, key="comissao_minima")
+        margem_emprestimo_limite = st.number_input("Margem de empréstimo mínima:", value=0.0, key="margem_limite")
+        idade_max = st.number_input("Idade máxima", 0, 120, 72, key="idade_max")
+        equipes = st.selectbox("Equipe da Campanha:", ['outbound', 'csapp', 'csativacao', 'cscdx', 'csport', 'outbound_virada'], key="equipes")
+        convai = st.slider("Porcentagem para IA (%)", 0.0, 100.0, 0.0, 1.0, key="convai")
 
-        # <<< MUDANÇA: Sistema de filtro duplo para Lotações >>>
+    with st.sidebar.expander("2. Filtros de Exclusão", expanded=True):
         lotacoes_salvas = regras_do_convenio.get('lotacoes', [])
         lotacoes_selecionadas = st.multiselect(
             "Selecionar lotações para excluir:",
             options=base[COL_LOTACAO].dropna().unique(),
-            default=lotacoes_salvas
+            default=lotacoes_salvas,
+            key="lotacoes_selecionadas"
         )
-        lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação (uma por linha):")
+        lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação (uma por linha):", key="lotacoes_chave")
         
-        # <<< MUDANÇA: Sistema de filtro duplo para Vínculos >>>
         vinculos_salvos = regras_do_convenio.get('vinculos', [])
         vinculos_selecionados = st.multiselect(
             "Selecionar vínculos para excluir:",
             options=base[COL_VINCULO].dropna().unique(),
-            default=vinculos_salvos
+            default=vinculos_salvos,
+            key="vinculos_selecionados"
         )
-        vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo (uma por linha):")
+        vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo (uma por linha):", key="vinculos_chave")
 
-        submitted = st.form_submit_button("⚡️ APLICAR FILTROS E PROCESSAR ⚡️")
+    # --- FIM DA SIDEBAR ---
 
-    # <<< MUDANÇA: A configuração de bancos fica fora do formulário, no painel principal >>>
     st.header("3. Configurações dos Bancos")
-    quant_bancos = st.number_input("Quantidade de Bancos:", min_value=1, max_value=10, value=1)
+    quant_bancos = st.number_input("Quantidade de Bancos:", min_value=1, max_value=10, value=1, key="quant_bancos")
     
     bancos_config_list = []
+    # Usamos o 'campanha' lido da sidebar para renderizar os bancos corretamente
     for i in range(quant_bancos):
-        banco_cfg = render_bank_config(i, campanha, base)
+        banco_cfg = render_bank_config(i, st.session_state.campanha, base)
         bancos_config_list.append(banco_cfg)
+        
+    st.write("---") # Linha divisória para separar o botão
 
-    if submitted:
-        # <<< MUDANÇA: Combina as duas listas de exclusão >>>
-        lotacoes_por_chave = [k.strip() for k in lotacoes_por_chave_str.strip().split('\n') if k.strip()]
-        selecao_lotacao_final = list(set(lotacoes_selecionadas + lotacoes_por_chave))
+    # <<< MUDANÇA: Botão de processamento na tela principal >>>
+    if st.button("⚡️ APLICAR FILTROS E PROCESSAR ⚡️", type="primary"):
+        lotacoes_por_chave = [k.strip() for k in st.session_state.lotacoes_chave.strip().split('\n') if k.strip()]
+        selecao_lotacao_final = list(set(st.session_state.lotacoes_selecionadas + lotacoes_por_chave))
 
-        vinculos_por_chave = [k.strip() for k in vinculos_por_chave_str.strip().split('\n') if k.strip()]
-        selecao_vinculos_final = list(set(vinculos_selecionados + vinculos_por_chave))
+        vinculos_por_chave = [k.strip() for k in st.session_state.vinculos_chave.strip().split('\n') if k.strip()]
+        selecao_vinculos_final = list(set(st.session_state.vinculos_selecionados + vinculos_por_chave))
 
         with st.spinner("Processando... A mágica está acontecendo! ✨"):
             try:
-                data_limite = (datetime.today() - pd.DateOffset(years=idade_max)).date()
+                data_limite = (datetime.today() - pd.DateOffset(years=st.session_state.idade_max)).date()
                 app_config = AppConfig(
-                    campanha=campanha, convenio=convenio_atual, comissao_minima=comissao_minima,
-                    margem_emprestimo_limite=margem_emprestimo_limite, data_limite=data_limite,
+                    campanha=st.session_state.campanha, convenio=convenio_atual, comissao_minima=st.session_state.comissao_minima,
+                    margem_emprestimo_limite=st.session_state.margem_limite, data_limite=data_limite,
                     selecao_lotacao=selecao_lotacao_final,
                     selecao_vinculos=selecao_vinculos_final,
-                    equipes=equipes, convai=convai, bancos_config=bancos_config_list
+                    equipes=st.session_state.equipes, convai=st.session_state.convai, bancos_config=bancos_config_list
                 )
                 
                 strategy_class = STRATEGY_MAPEAMENTO[app_config.campanha]
@@ -160,6 +159,7 @@ def main():
                 st.error(f"Ocorreu um erro durante o processamento: {e}")
                 st.session_state['show_results'] = False
 
+    # Exibe os resultados se eles existirem no estado da sessão
     if st.session_state.get('show_results', False):
         st.header("Resultados")
         df_resultado = st.session_state['df_filtrado']
