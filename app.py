@@ -1,4 +1,4 @@
-# app.py (Versão com Expanders na Sidebar e Botão Principal)
+# app.py
 
 import streamlit as st
 import pandas as pd
@@ -65,8 +65,8 @@ def render_bank_config(index: int, campanha: str, base: pd.DataFrame) -> BancoCo
         )
 
 def main():
-    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V4.3')
-    st.title("🚀 Filtro de Campanhas - Konsi V4.3")
+    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V4.4')
+    st.title("🚀 Filtro de Campanhas - Konsi V4.4")
     st.sidebar.header("⚙️ Painel de Controle")
 
     regras_exclusao = carregar_regras_de_exclusao()
@@ -83,11 +83,8 @@ def main():
     st.dataframe(base.head())
 
     convenio_atual = base.loc[0, COL_CONVENIO].strip().lower()
-    regras_do_convenio = regras_exclusao.get(convenio_atual, {})
 
     # --- INÍCIO DA SIDEBAR ---
-    
-    # <<< MUDANÇA: Usando st.expander para organização >>>
     with st.sidebar.expander("1. Configurações Gerais", expanded=True):
         campanha = st.selectbox("Tipo da Campanha:", list(STRATEGY_MAPEAMENTO.keys()), key="campanha")
         comissao_minima = st.number_input("Comissão mínima da campanha:", value=0.0, key="comissao_minima")
@@ -96,8 +93,13 @@ def main():
         equipes = st.selectbox("Equipe da Campanha:", ['outbound', 'csapp', 'csativacao', 'cscdx', 'csport', 'outbound_virada'], key="equipes")
         convai = st.slider("Porcentagem para IA (%)", 0.0, 100.0, 0.0, 1.0, key="convai")
 
+    # Lógica para buscar regras por convênio E campanha >>>
+    campanha_key = campanha.lower().replace(' & ', '_').replace(' ', '_')
+    regras_do_convenio = regras_exclusao.get(convenio_atual, {})
+    regras_da_campanha = regras_do_convenio.get(campanha_key, {}) # Pega as regras da campanha específica
+
     with st.sidebar.expander("2. Filtros de Exclusão", expanded=True):
-        lotacoes_salvas = regras_do_convenio.get('lotacoes', [])
+        lotacoes_salvas = regras_da_campanha.get('lotacoes', [])
         lotacoes_selecionadas = st.multiselect(
             "Selecionar lotações para excluir:",
             options=base[COL_LOTACAO].dropna().unique(),
@@ -106,7 +108,7 @@ def main():
         )
         lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação (uma por linha):", key="lotacoes_chave")
         
-        vinculos_salvos = regras_do_convenio.get('vinculos', [])
+        vinculos_salvos = regras_da_campanha.get('vinculos', [])
         vinculos_selecionados = st.multiselect(
             "Selecionar vínculos para excluir:",
             options=base[COL_VINCULO].dropna().unique(),
@@ -114,21 +116,18 @@ def main():
             key="vinculos_selecionados"
         )
         vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo (uma por linha):", key="vinculos_chave")
-
     # --- FIM DA SIDEBAR ---
 
     st.header("3. Configurações dos Bancos")
     quant_bancos = st.number_input("Quantidade de Bancos:", min_value=1, max_value=10, value=1, key="quant_bancos")
     
     bancos_config_list = []
-    # Usamos o 'campanha' lido da sidebar para renderizar os bancos corretamente
     for i in range(quant_bancos):
         banco_cfg = render_bank_config(i, st.session_state.campanha, base)
         bancos_config_list.append(banco_cfg)
         
-    st.write("---") # Linha divisória para separar o botão
-
-    # <<< MUDANÇA: Botão de processamento na tela principal >>>
+    st.write("---") 
+    
     if st.button("⚡️ APLICAR FILTROS E PROCESSAR ⚡️", type="primary"):
         lotacoes_por_chave = [k.strip() for k in st.session_state.lotacoes_chave.strip().split('\n') if k.strip()]
         selecao_lotacao_final = list(set(st.session_state.lotacoes_selecionadas + lotacoes_por_chave))
@@ -159,7 +158,6 @@ def main():
                 st.error(f"Ocorreu um erro durante o processamento: {e}")
                 st.session_state['show_results'] = False
 
-    # Exibe os resultados se eles existirem no estado da sessão
     if st.session_state.get('show_results', False):
         st.header("Resultados")
         df_resultado = st.session_state['df_filtrado']
