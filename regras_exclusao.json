@@ -1,24 +1,26 @@
 {
   "govsp": {
-    "lotacoes": [
-    ],
-    "vinculos": [
-    ],
-    "secretarias": [
-    ]
+    "novo": {
+      "lotacoes": [],
+      "vinculos": [],
+      "secretarias": []
+    },
+    "cartao": {
+      "lotacoes": [],
+      "vinculos": [],
+      "secretarias": []
+    }
   },
-  "goval": {
-    "lotacoes": [
-    ],
-    "vinculos": [
-    ],
-    "secretarias": [
-    ]
-  },
-  "govmt": {
-    "lotacoes": [
-    ],
-    "vinculos": [],
-    "secretarias": []
+  "beneficio_cartao": {
+      "lotacoes": [],
+      "vinculos": [],
+      "secretarias": []
+    },
+  "prefsp": {
+    "novo": {
+      "lotacoes": [],
+      "vinculos": [],
+      "secretarias": []
+    }
   }
 }
