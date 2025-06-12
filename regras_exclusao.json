@@ -9,13 +9,13 @@
       "lotacoes": [],
       "vinculos": [],
       "secretarias": []
-    }
-  },
-  "beneficio_cartao": {
+    },
+    "beneficio_cartao": {
       "lotacoes": [],
       "vinculos": [],
       "secretarias": []
-    },
+    }
+  },
   "prefsp": {
     "novo": {
       "lotacoes": [],
