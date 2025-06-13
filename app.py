@@ -1,3 +1,4 @@
+# app.py (Versão 5.3 - Corrigido para Reatividade dos Filtros)
 
 import streamlit as st
 import pandas as pd
@@ -65,8 +66,8 @@ def render_bank_config(index: int, campanha: str, base: pd.DataFrame) -> BancoCo
         )
 
 def main():
-    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V5.2')
-    st.title("🚀 Filtro de Campanhas - Konsi V5.2")
+    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V5.3')
+    st.title("🚀 Filtro de Campanhas - Konsi V5.3")
     st.sidebar.header("⚙️ Painel de Controle")
 
     regras_collection = connect_to_mongodb()
@@ -85,49 +86,56 @@ def main():
     convenio_atual = base.loc[0, COL_CONVENIO].strip().lower()
 
     with st.sidebar.expander("1. Configurações Gerais", expanded=True):
-        campanha = st.selectbox("Tipo da Campanha:", list(STRATEGY_MAPEAMENTO.keys()), key="campanha")
-        comissao_minima = st.number_input("Comissão mínima da campanha:", value=0.0, key="comissao_minima")
-        margem_emprestimo_limite = st.number_input("Margem de empréstimo mínima:", value=0.0, key="margem_limite")
-        idade_max = st.number_input("Idade máxima", 0, 120, 72, key="idade_max")
-        equipes = st.selectbox("Equipe da Campanha:", ['outbound', 'csapp', 'csativacao', 'cscdx', 'csport', 'outbound_virada'], key="equipes")
-        convai = st.slider("Porcentagem para IA (%)", 0.0, 100.0, 0.0, 1.0, key="convai")
+        campanha = st.selectbox("Tipo da Campanha:", list(STRATEGY_MAPEAMENTO.keys()))
+        comissao_minima = st.number_input("Comissão mínima da campanha:", value=0.0)
+        margem_emprestimo_limite = st.number_input("Margem de empréstimo mínima:", value=0.0)
+        idade_max = st.number_input("Idade máxima", 0, 120, 72)
+        equipes = st.selectbox("Equipe da Campanha:", ['outbound', 'csapp', 'csativacao', 'cscdx', 'csport', 'outbound_virada'])
+        convai = st.slider("Porcentagem para IA (%)", 0.0, 100.0, 0.0, 1.0)
 
     regras_da_campanha = carregar_regras_da_bd(regras_collection, convenio_atual, campanha)
 
     with st.sidebar.expander("2. Filtros de Exclusão", expanded=True):
-        
+        # KEY DINAMICA -> PARA SEMPRE QUE ALTERAR O TIPO DE CAMPANHA, OS CAMPOS ATUALIZAREM TAMBÉM
+
         # Lotações
         opcoes_lotacao = base[COL_LOTACAO].dropna().unique()
         lotacoes_salvas = regras_da_campanha.get('lotacoes', [])
         lotacoes_default_validas = [l for l in lotacoes_salvas if l in opcoes_lotacao]
+
         lotacoes_selecionadas = st.multiselect(
             "Selecionar lotações para excluir:",
             options=opcoes_lotacao,
-            default=lotacoes_default_validas
+            default=lotacoes_default_validas,
+            key=f"ms_lotacoes_{campanha}"
         )
-        lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação:")
+        lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação:", key=f"ta_lotacoes_{campanha}")
         
         # Vínculos
         opcoes_vinculo = base[COL_VINCULO].dropna().unique()
         vinculos_salvos = regras_da_campanha.get('vinculos', [])
         vinculos_default_validos = [v for v in vinculos_salvos if v in opcoes_vinculo]
+        
         vinculos_selecionados = st.multiselect(
             "Selecionar vínculos para excluir:",
             options=opcoes_vinculo,
-            default=vinculos_default_validos
+            default=vinculos_default_validos,
+            key=f"ms_vinculos_{campanha}"
         )
-        vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo:")
+        vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo:", key=f"ta_vinculos_{campanha}")
         
         # Secretarias
         opcoes_secretaria = base[COL_SECRETARIA].dropna().unique()
         secretarias_salvas = regras_da_campanha.get('secretarias', [])
         secretarias_default_validas = [s for s in secretarias_salvas if s in opcoes_secretaria]
+
         secretarias_selecionadas = st.multiselect(
             "Selecionar secretarias para excluir:",
             options=opcoes_secretaria,
-            default=secretarias_default_validas
+            default=secretarias_default_validas,
+            key=f"ms_secretarias_{campanha}"
         )
-        secretarias_por_chave_str = st.text_area("Digitar palavras-chave de secretaria:")
+        secretarias_por_chave_str = st.text_area("Digitar palavras-chave de secretaria:", key=f"ta_secretarias_{campanha}")
 
     st.header("3. Configurações dos Bancos")
     quant_bancos = st.number_input("Quantidade de Bancos:", min_value=1, max_value=10, value=1)
