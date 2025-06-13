@@ -1,4 +1,4 @@
-# app.py (Versão 5.4 com Depurador de Regras)
+# app.py (Versão 5.5 com Depurador Melhorado)
 
 import streamlit as st
 import pandas as pd
@@ -66,8 +66,8 @@ def render_bank_config(index: int, campanha: str, base: pd.DataFrame) -> BancoCo
         )
 
 def main():
-    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V5.4')
-    st.title("🚀 Filtro de Campanhas - Konsi V5.4")
+    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V5.5')
+    st.title("🚀 Filtro de Campanhas - Konsi V5.5")
     st.sidebar.header("⚙️ Painel de Controle")
 
     regras_collection = connect_to_mongodb()
@@ -97,45 +97,40 @@ def main():
 
     with st.sidebar.expander("2. Filtros de Exclusão", expanded=True):
         
-        # Lotações
         opcoes_lotacao = base[COL_LOTACAO].dropna().unique()
         lotacoes_salvas = regras_da_campanha.get('lotacoes', [])
         lotacoes_default_validas = [l for l in lotacoes_salvas if l in opcoes_lotacao]
         lotacoes_selecionadas = st.multiselect(
-            "Selecionar lotações para excluir:",
-            options=opcoes_lotacao,
-            default=lotacoes_default_validas,
-            key=f"ms_lotacoes_{campanha}"
+            "Selecionar lotações para excluir:", options=opcoes_lotacao,
+            default=lotacoes_default_validas, key=f"ms_lotacoes_{campanha}"
         )
         lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação:", key=f"ta_lotacoes_{campanha}")
         
-        # Vínculos
         opcoes_vinculo = base[COL_VINCULO].dropna().unique()
         vinculos_salvos = regras_da_campanha.get('vinculos', [])
         vinculos_default_validos = [v for v in vinculos_salvos if v in opcoes_vinculo]
         vinculos_selecionados = st.multiselect(
-            "Selecionar vínculos para excluir:",
-            options=opcoes_vinculo,
-            default=vinculos_default_validos,
-            key=f"ms_vinculos_{campanha}"
+            "Selecionar vínculos para excluir:", options=opcoes_vinculo,
+            default=vinculos_default_validos, key=f"ms_vinculos_{campanha}"
         )
         vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo:", key=f"ta_vinculos_{campanha}")
         
-        # Secretarias
         opcoes_secretaria = base[COL_SECRETARIA].dropna().unique()
         secretarias_salvas = regras_da_campanha.get('secretarias', [])
         secretarias_default_validas = [s for s in secretarias_salvas if s in opcoes_secretaria]
         secretarias_selecionadas = st.multiselect(
-            "Selecionar secretarias para excluir:",
-            options=opcoes_secretaria,
-            default=secretarias_default_validas,
-            key=f"ms_secretarias_{campanha}"
+            "Selecionar secretarias para excluir:", options=opcoes_secretaria,
+            default=secretarias_default_validas, key=f"ms_secretarias_{campanha}"
         )
         secretarias_por_chave_str = st.text_area("Digitar palavras-chave de secretaria:", key=f"ta_secretarias_{campanha}")
 
-    # <<< NOVO BLOCO DEPURADOR >>>
+    # <<< DEPURADOR MELHORADO >>>
     with st.sidebar.expander("🔍 Depurador de Regras", expanded=False):
-        st.write("Regras encontradas na Base de Dados para a seleção atual:")
+        campanha_key = campanha.lower().replace(' & ', '_').replace(' ', '_')
+        st.write("Valores usados para a busca na BD:")
+        st.code(f"Convenio: '{convenio_atual}'\nProduto: '{campanha_key}'", language="text")
+        st.write("---")
+        st.write("Resultado da busca (JSON):")
         st.json(regras_da_campanha)
 
     st.header("3. Configurações dos Bancos")
