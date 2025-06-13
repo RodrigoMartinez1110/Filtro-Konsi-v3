@@ -1,19 +1,16 @@
 # filter_handler.py
-
 import pandas as pd
-import re  # Módulo de expressões regulares, essencial para o filtro por palavra-chave
+import re 
 from datetime import datetime
 from config import AppConfig
 from constants import *
 from strategies import FiltroStrategy
-
 
 class FiltroHandler:
     """
     Orquestra todo o processo de filtragem, aplicando etapas comuns de pré e pós-processamento,
     e utilizando uma estratégia específica para a lógica de negócio da campanha.
     """
-
     def __init__(self, df: pd.DataFrame, config: AppConfig, strategy_class: type[FiltroStrategy]):
         self.df = df.copy()
         self.config = config
@@ -25,7 +22,7 @@ class FiltroHandler:
             raise ValueError("A base de dados está vazia.")
 
         self.df = self.df.iloc[:, :26]
-
+        
         if COL_NOME_CLIENTE in self.df.columns:
             self.df[COL_NOME_CLIENTE] = self.df[COL_NOME_CLIENTE].apply(
                 lambda x: x.title() if isinstance(x, str) else x)
@@ -33,48 +30,54 @@ class FiltroHandler:
         if COL_CPF in self.df.columns:
             self.df[COL_CPF] = self.df[COL_CPF].str.replace(r"[.-]", "", regex=True)
 
-        # Logica de exclusao de LOTAÇÕES por palavra chave
+        # Lógica de exclusão por palavra-chave para LOTAÇÃO
         if self.config.selecao_lotacao:
-            # Cria um padrão regex a partir das palavras-chave: 'PALAVRA1|PALAVRA2|...'
             padrao_lotacao = '|'.join([re.escape(k) for k in self.config.selecao_lotacao if k])
-            if padrao_lotacao:
-                # Exclui todas as linhas que contenham qualquer uma das palavras-chave
+            if padrao_lotacao and COL_LOTACAO in self.df.columns:
                 self.df = self.df[~self.df[COL_LOTACAO].str.contains(padrao_lotacao, case=False, na=False)]
 
         # Lógica de exclusão por palavra-chave para VÍNCULO
         if self.config.selecao_vinculos:
             padrao_vinculo = '|'.join([re.escape(k) for k in self.config.selecao_vinculos if k])
-            if padrao_vinculo:
+            if padrao_vinculo and COL_VINCULO in self.df.columns:
                 self.df = self.df[~self.df[COL_VINCULO].str.contains(padrao_vinculo, case=False, na=False)]
+        
+        # Lógica de exclusão por palavra-chave para SECRETARIA
+        if self.config.selecao_secretaria:
+            padrao_secretaria = '|'.join([re.escape(k) for k in self.config.selecao_secretaria if k])
+            if padrao_secretaria and COL_SECRETARIA in self.df.columns:
+                self.df = self.df[~self.df[COL_SECRETARIA].str.contains(padrao_secretaria, case=False, na=False)]
 
         # Filtro por data de nascimento (idade)
-        if self.config.data_limite and COL_DATA_NASCIMENTO in self.df.columns and self.df[
-            COL_DATA_NASCIMENTO].notna().any():
+        if self.config.data_limite and COL_DATA_NASCIMENTO in self.df.columns and self.df[COL_DATA_NASCIMENTO].notna().any():
             self.df[COL_DATA_NASCIMENTO] = pd.to_datetime(self.df[COL_DATA_NASCIMENTO], dayfirst=True, errors='coerce')
             self.df = self.df.dropna(subset=[COL_DATA_NASCIMENTO])
             self.df = self.df[self.df[COL_DATA_NASCIMENTO].dt.date >= self.config.data_limite]
 
         # Filtro por margem mínima
-        self.df = self.df.loc[self.df[COL_MG_EMPRESTIMO_DISP] >= self.config.margem_emprestimo_limite]
-
+        if COL_MG_EMPRESTIMO_DISP in self.df.columns:
+             self.df = self.df.loc[self.df[COL_MG_EMPRESTIMO_DISP] >= self.config.margem_emprestimo_limite]
+        
         # Especificidades de convênios
         if self.config.convenio == 'govsp':
-            negativos = self.df.loc[self.df[COL_MG_EMPRESTIMO_DISP] < 0]
-            self.df = self.df.loc[~self.df[COL_MATRICULA].isin(negativos[COL_MATRICULA])]
+            if COL_MG_EMPRESTIMO_DISP in self.df.columns:
+                negativos = self.df.loc[self.df[COL_MG_EMPRESTIMO_DISP] < 0]
+                self.df = self.df.loc[~self.df[COL_MATRICULA].isin(negativos[COL_MATRICULA])]
         elif self.config.convenio == 'govmt':
             if COL_MG_COMPULSORIA_DISP in self.df.columns:
                 self.df = self.df.loc[self.df[COL_MG_COMPULSORIA_DISP] >= 0]
 
+
     def _post_processamento(self):
         """Aplica formatação final, remove duplicados e gera colunas finais."""
-        self.df = self.df.drop_duplicates(subset=[COL_CPF])
+        if COL_CPF in self.df.columns:
+            self.df = self.df.drop_duplicates(subset=[COL_CPF])
 
         # Adiciona colunas faltantes e define a ordem final
         for col in COLUNAS_FINAIS:
             if col not in self.df.columns:
                 self.df[col] = ''
 
-        # Garante a ordem correta e remove colunas extras
         colunas_presentes = [col for col in COLUNAS_FINAIS if col in self.df.columns]
         self.df = self.df[colunas_presentes]
         
@@ -104,7 +107,6 @@ class FiltroHandler:
         """Executa o pipeline completo de filtragem."""
         self._pre_processamento()
 
-        # Injeta a lógica específica da campanha
         strategy_instance = self.strategy_class(self.df, self.config)
         self.df = strategy_instance.aplicar_regras_especificas()
 

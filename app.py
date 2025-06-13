@@ -1,4 +1,4 @@
-# app.py
+# app.py (Versão com Filtro de Secretarias)
 
 import streamlit as st
 import pandas as pd
@@ -10,7 +10,7 @@ from config import AppConfig, BancoConfig
 from constants import *
 from strategies import NovoStrategy, BeneficioStrategy, CartaoStrategy, BeneficioECartaoStrategy
 from filter_handler import FiltroHandler
-from utils import carregar_regras_de_exclusao
+from db_utils import connect_to_mongodb, carregar_regras_da_bd
 
 @st.cache_data
 def carregar_e_juntar_arquivos_cache(lista_de_arquivos):
@@ -24,6 +24,7 @@ STRATEGY_MAPEAMENTO = {
     'Cartão': CartaoStrategy,
     'Benefício & Cartão': BeneficioECartaoStrategy,
 }
+
 
 def render_bank_config(index: int, campanha: str, base: pd.DataFrame) -> BancoConfig:
     """Renderiza os widgets do Streamlit para um banco e retorna um objeto BancoConfig."""
@@ -65,11 +66,11 @@ def render_bank_config(index: int, campanha: str, base: pd.DataFrame) -> BancoCo
         )
 
 def main():
-    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V4.4')
-    st.title("🚀 Filtro de Campanhas - Konsi V4.4")
+    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V5.1')
+    st.title("🚀 Filtro de Campanhas - Konsi V5.1")
     st.sidebar.header("⚙️ Painel de Controle")
 
-    regras_exclusao = carregar_regras_de_exclusao()
+    regras_collection = connect_to_mongodb()
 
     arquivos = st.sidebar.file_uploader('Arraste os arquivos CSV de higienização', accept_multiple_files=True, type=['csv'])
 
@@ -93,10 +94,8 @@ def main():
         equipes = st.selectbox("Equipe da Campanha:", ['outbound', 'csapp', 'csativacao', 'cscdx', 'csport', 'outbound_virada'], key="equipes")
         convai = st.slider("Porcentagem para IA (%)", 0.0, 100.0, 0.0, 1.0, key="convai")
 
-    # Lógica para buscar regras por convênio E campanha >>>
-    campanha_key = campanha.lower().replace(' & ', '_').replace(' ', '_')
-    regras_do_convenio = regras_exclusao.get(convenio_atual, {})
-    regras_da_campanha = regras_do_convenio.get(campanha_key, {}) # Pega as regras da campanha específica
+
+    regras_da_campanha = carregar_regras_da_bd(regras_collection, convenio_atual, campanha)
 
     with st.sidebar.expander("2. Filtros de Exclusão", expanded=True):
         lotacoes_salvas = regras_da_campanha.get('lotacoes', [])
@@ -106,7 +105,7 @@ def main():
             default=lotacoes_salvas,
             key="lotacoes_selecionadas"
         )
-        lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação (uma por linha):", key="lotacoes_chave")
+        lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação:", key="lotacoes_chave")
         
         vinculos_salvos = regras_da_campanha.get('vinculos', [])
         vinculos_selecionados = st.multiselect(
@@ -115,7 +114,18 @@ def main():
             default=vinculos_salvos,
             key="vinculos_selecionados"
         )
-        vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo (uma por linha):", key="vinculos_chave")
+        vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo:", key="vinculos_chave")
+        
+        # <<< NOVA SEÇÃO PARA SECRETARIAS >>>
+        secretarias_salvas = regras_da_campanha.get('secretarias', [])
+        secretarias_selecionadas = st.multiselect(
+            "Selecionar secretarias para excluir:",
+            options=base[COL_SECRETARIA].dropna().unique(),
+            default=secretarias_salvas,
+            key="secretarias_selecionadas"
+        )
+        secretarias_por_chave_str = st.text_area("Digitar palavras-chave de secretaria:", key="secretarias_chave")
+
     # --- FIM DA SIDEBAR ---
 
     st.header("3. Configurações dos Bancos")
@@ -133,7 +143,11 @@ def main():
         selecao_lotacao_final = list(set(st.session_state.lotacoes_selecionadas + lotacoes_por_chave))
 
         vinculos_por_chave = [k.strip() for k in st.session_state.vinculos_chave.strip().split('\n') if k.strip()]
-        selecao_vinculos_final = list(set(st.session_state.vinculos_selecionados + vinculos_por_chave))
+        selecao_vinculos_final = list(set(st.session_state.vinculos_selecionadas + vinculos_por_chave))
+        
+        # <<< COMBINA AS EXCLUSÕES DE SECRETARIA >>>
+        secretarias_por_chave = [k.strip() for k in st.session_state.secretarias_chave.strip().split('\n') if k.strip()]
+        selecao_secretaria_final = list(set(st.session_state.secretarias_selecionadas + secretarias_por_chave))
 
         with st.spinner("Processando... A mágica está acontecendo! ✨"):
             try:
@@ -143,6 +157,7 @@ def main():
                     margem_emprestimo_limite=st.session_state.margem_limite, data_limite=data_limite,
                     selecao_lotacao=selecao_lotacao_final,
                     selecao_vinculos=selecao_vinculos_final,
+                    selecao_secretaria=selecao_secretaria_final, # <<< PASSA PARA A CONFIGURAÇÃO >>>
                     equipes=st.session_state.equipes, convai=st.session_state.convai, bancos_config=bancos_config_list
                 )
                 

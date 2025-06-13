@@ -29,6 +29,7 @@ class AppConfig:
     data_limite: Optional[date]
     selecao_lotacao: Optional[List[str]]
     selecao_vinculos: Optional[List[str]]
+    selecao_secretaria: Optional[List[str]] # <<< NOVO CAMPO ADICIONADO >>>
     equipes: str
     convai: float
     bancos_config: List[BancoConfig] = field(default_factory=list)
