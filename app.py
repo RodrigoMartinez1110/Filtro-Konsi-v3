@@ -1,4 +1,3 @@
-# app.py (Versão com Filtro de Secretarias)
 
 import streamlit as st
 import pandas as pd
@@ -66,8 +65,8 @@ def render_bank_config(index: int, campanha: str, base: pd.DataFrame) -> BancoCo
         )
 
 def main():
-    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V5.1')
-    st.title("🚀 Filtro de Campanhas - Konsi V5.1")
+    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V5.2')
+    st.title("🚀 Filtro de Campanhas - Konsi V5.2")
     st.sidebar.header("⚙️ Painel de Controle")
 
     regras_collection = connect_to_mongodb()
@@ -85,7 +84,6 @@ def main():
 
     convenio_atual = base.loc[0, COL_CONVENIO].strip().lower()
 
-    # --- INÍCIO DA SIDEBAR ---
     with st.sidebar.expander("1. Configurações Gerais", expanded=True):
         campanha = st.selectbox("Tipo da Campanha:", list(STRATEGY_MAPEAMENTO.keys()), key="campanha")
         comissao_minima = st.number_input("Comissão mínima da campanha:", value=0.0, key="comissao_minima")
@@ -94,71 +92,68 @@ def main():
         equipes = st.selectbox("Equipe da Campanha:", ['outbound', 'csapp', 'csativacao', 'cscdx', 'csport', 'outbound_virada'], key="equipes")
         convai = st.slider("Porcentagem para IA (%)", 0.0, 100.0, 0.0, 1.0, key="convai")
 
-
     regras_da_campanha = carregar_regras_da_bd(regras_collection, convenio_atual, campanha)
 
     with st.sidebar.expander("2. Filtros de Exclusão", expanded=True):
+        
+        # Lotações
+        opcoes_lotacao = base[COL_LOTACAO].dropna().unique()
         lotacoes_salvas = regras_da_campanha.get('lotacoes', [])
+        lotacoes_default_validas = [l for l in lotacoes_salvas if l in opcoes_lotacao]
         lotacoes_selecionadas = st.multiselect(
             "Selecionar lotações para excluir:",
-            options=base[COL_LOTACAO].dropna().unique(),
-            default=lotacoes_salvas,
-            key="lotacoes_selecionadas"
+            options=opcoes_lotacao,
+            default=lotacoes_default_validas
         )
-        lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação:", key="lotacoes_chave")
+        lotacoes_por_chave_str = st.text_area("Digitar palavras-chave de lotação:")
         
+        # Vínculos
+        opcoes_vinculo = base[COL_VINCULO].dropna().unique()
         vinculos_salvos = regras_da_campanha.get('vinculos', [])
+        vinculos_default_validos = [v for v in vinculos_salvos if v in opcoes_vinculo]
         vinculos_selecionados = st.multiselect(
             "Selecionar vínculos para excluir:",
-            options=base[COL_VINCULO].dropna().unique(),
-            default=vinculos_salvos,
-            key="vinculos_selecionados"
+            options=opcoes_vinculo,
+            default=vinculos_default_validos
         )
-        vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo:", key="vinculos_chave")
+        vinculos_por_chave_str = st.text_area("Digitar palavras-chave de vínculo:")
         
-        # <<< NOVA SEÇÃO PARA SECRETARIAS >>>
+        # Secretarias
+        opcoes_secretaria = base[COL_SECRETARIA].dropna().unique()
         secretarias_salvas = regras_da_campanha.get('secretarias', [])
+        secretarias_default_validas = [s for s in secretarias_salvas if s in opcoes_secretaria]
         secretarias_selecionadas = st.multiselect(
             "Selecionar secretarias para excluir:",
-            options=base[COL_SECRETARIA].dropna().unique(),
-            default=secretarias_salvas,
-            key="secretarias_selecionadas"
+            options=opcoes_secretaria,
+            default=secretarias_default_validas
         )
-        secretarias_por_chave_str = st.text_area("Digitar palavras-chave de secretaria:", key="secretarias_chave")
-
-    # --- FIM DA SIDEBAR ---
+        secretarias_por_chave_str = st.text_area("Digitar palavras-chave de secretaria:")
 
     st.header("3. Configurações dos Bancos")
-    quant_bancos = st.number_input("Quantidade de Bancos:", min_value=1, max_value=10, value=1, key="quant_bancos")
+    quant_bancos = st.number_input("Quantidade de Bancos:", min_value=1, max_value=10, value=1)
     
     bancos_config_list = []
     for i in range(quant_bancos):
-        banco_cfg = render_bank_config(i, st.session_state.campanha, base)
+        banco_cfg = render_bank_config(i, campanha, base)
         bancos_config_list.append(banco_cfg)
         
     st.write("---") 
     
     if st.button("⚡️ APLICAR FILTROS E PROCESSAR ⚡️", type="primary"):
-        lotacoes_por_chave = [k.strip() for k in st.session_state.lotacoes_chave.strip().split('\n') if k.strip()]
-        selecao_lotacao_final = list(set(st.session_state.lotacoes_selecionadas + lotacoes_por_chave))
-
-        vinculos_por_chave = [k.strip() for k in st.session_state.vinculos_chave.strip().split('\n') if k.strip()]
-        selecao_vinculos_final = list(set(st.session_state.vinculos_selecionadas + vinculos_por_chave))
-        
-        # <<< COMBINA AS EXCLUSÕES DE SECRETARIA >>>
-        secretarias_por_chave = [k.strip() for k in st.session_state.secretarias_chave.strip().split('\n') if k.strip()]
-        selecao_secretaria_final = list(set(st.session_state.secretarias_selecionadas + secretarias_por_chave))
+        selecao_lotacao_final = list(set(lotacoes_selecionadas + [k.strip() for k in lotacoes_por_chave_str.strip().split('\n') if k.strip()]))
+        selecao_vinculos_final = list(set(vinculos_selecionados + [k.strip() for k in vinculos_por_chave_str.strip().split('\n') if k.strip()]))
+        selecao_secretaria_final = list(set(secretarias_selecionadas + [k.strip() for k in secretarias_por_chave_str.strip().split('\n') if k.strip()]))
 
         with st.spinner("Processando... A mágica está acontecendo! ✨"):
             try:
-                data_limite = (datetime.today() - pd.DateOffset(years=st.session_state.idade_max)).date()
+                data_limite = (datetime.today() - pd.DateOffset(years=idade_max)).date()
                 app_config = AppConfig(
-                    campanha=st.session_state.campanha, convenio=convenio_atual, comissao_minima=st.session_state.comissao_minima,
-                    margem_emprestimo_limite=st.session_state.margem_limite, data_limite=data_limite,
+                    campanha=campanha, convenio=convenio_atual, comissao_minima=comissao_minima,
+                    margem_emprestimo_limite=margem_emprestimo_limite, data_limite=data_limite,
                     selecao_lotacao=selecao_lotacao_final,
                     selecao_vinculos=selecao_vinculos_final,
-                    selecao_secretaria=selecao_secretaria_final, # <<< PASSA PARA A CONFIGURAÇÃO >>>
-                    equipes=st.session_state.equipes, convai=st.session_state.convai, bancos_config=bancos_config_list
+                    selecao_secretaria=selecao_secretaria_final,
+                    equipes=equipes, convai=convai, bancos_config=bancos_config_list
                 )
                 
                 strategy_class = STRATEGY_MAPEAMENTO[app_config.campanha]
@@ -168,7 +163,6 @@ def main():
                 st.session_state['df_filtrado'] = base_filtrada
                 st.session_state['nome_arquivo'] = f"{app_config.convenio}-{app_config.campanha}.csv"
                 st.session_state['show_results'] = True
-
             except Exception as e:
                 st.error(f"Ocorreu um erro durante o processamento: {e}")
                 st.session_state['show_results'] = False
@@ -178,11 +172,10 @@ def main():
         df_resultado = st.session_state['df_filtrado']
         st.success(f"Filtro concluído! {len(df_resultado)} linhas encontradas.")
         st.dataframe(df_resultado)
-
         csv = df_resultado.to_csv(index=False, sep=';', encoding='utf-8-sig')
         st.download_button(
             label="📥 Baixar CSV Filtrado", data=csv,
-            file_name=st.session_state['nome_arquivo'], mime='text/csv',
+            file_name=st.session_state['nome_arquivo'], mime='text/csv'
         )
 
 if __name__ == "__main__":
