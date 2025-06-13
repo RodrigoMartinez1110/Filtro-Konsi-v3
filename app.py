@@ -1,4 +1,4 @@
-# app.py (Versão 5.3 - Corrigido para Reatividade dos Filtros)
+# app.py (Versão 5.4 com Depurador de Regras)
 
 import streamlit as st
 import pandas as pd
@@ -66,8 +66,8 @@ def render_bank_config(index: int, campanha: str, base: pd.DataFrame) -> BancoCo
         )
 
 def main():
-    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V5.3')
-    st.title("🚀 Filtro de Campanhas - Konsi V5.3")
+    st.set_page_config(layout="wide", page_title='Filtrador de Campanhas V5.4')
+    st.title("🚀 Filtro de Campanhas - Konsi V5.4")
     st.sidebar.header("⚙️ Painel de Controle")
 
     regras_collection = connect_to_mongodb()
@@ -96,13 +96,11 @@ def main():
     regras_da_campanha = carregar_regras_da_bd(regras_collection, convenio_atual, campanha)
 
     with st.sidebar.expander("2. Filtros de Exclusão", expanded=True):
-        # KEY DINAMICA -> PARA SEMPRE QUE ALTERAR O TIPO DE CAMPANHA, OS CAMPOS ATUALIZAREM TAMBÉM
-
+        
         # Lotações
         opcoes_lotacao = base[COL_LOTACAO].dropna().unique()
         lotacoes_salvas = regras_da_campanha.get('lotacoes', [])
         lotacoes_default_validas = [l for l in lotacoes_salvas if l in opcoes_lotacao]
-
         lotacoes_selecionadas = st.multiselect(
             "Selecionar lotações para excluir:",
             options=opcoes_lotacao,
@@ -115,7 +113,6 @@ def main():
         opcoes_vinculo = base[COL_VINCULO].dropna().unique()
         vinculos_salvos = regras_da_campanha.get('vinculos', [])
         vinculos_default_validos = [v for v in vinculos_salvos if v in opcoes_vinculo]
-        
         vinculos_selecionados = st.multiselect(
             "Selecionar vínculos para excluir:",
             options=opcoes_vinculo,
@@ -128,7 +125,6 @@ def main():
         opcoes_secretaria = base[COL_SECRETARIA].dropna().unique()
         secretarias_salvas = regras_da_campanha.get('secretarias', [])
         secretarias_default_validas = [s for s in secretarias_salvas if s in opcoes_secretaria]
-
         secretarias_selecionadas = st.multiselect(
             "Selecionar secretarias para excluir:",
             options=opcoes_secretaria,
@@ -136,6 +132,11 @@ def main():
             key=f"ms_secretarias_{campanha}"
         )
         secretarias_por_chave_str = st.text_area("Digitar palavras-chave de secretaria:", key=f"ta_secretarias_{campanha}")
+
+    # <<< NOVO BLOCO DEPURADOR >>>
+    with st.sidebar.expander("🔍 Depurador de Regras", expanded=False):
+        st.write("Regras encontradas na Base de Dados para a seleção atual:")
+        st.json(regras_da_campanha)
 
     st.header("3. Configurações dos Bancos")
     quant_bancos = st.number_input("Quantidade de Bancos:", min_value=1, max_value=10, value=1)
