@@ -26,14 +26,17 @@ class FiltroHandler:
         o cartão benefício ou consignado.
         """
         if self.config.convenio == 'govsp':
-            # Calcula a margem usada para o benefício
-            margem_beneficio_usada = self.df[COL_MG_BENEFICIO_SAQUE_TOTAL] - self.df[COL_MG_BENEFICIO_SAQUE_DISP]
+            # Converte as colunas para numérico antes de calcular, para segurança
+            mg_beneficio_total = pd.to_numeric(self.df[COL_MG_BENEFICIO_SAQUE_TOTAL], errors='coerce').fillna(0)
+            mg_beneficio_disp = pd.to_numeric(self.df[COL_MG_BENEFICIO_SAQUE_DISP], errors='coerce').fillna(0)
+            margem_beneficio_usada = mg_beneficio_total - mg_beneficio_disp
             df_usou_beneficio = self.df.loc[margem_beneficio_usada > 0]
             if not df_usou_beneficio.empty:
                 self.usou_beneficio_matriculas = set(df_usou_beneficio[COL_MATRICULA])
 
-            # Calcula a margem usada para o cartão
-            margem_cartao_usada = self.df[COL_MG_CARTAO_TOTAL] - self.df[COL_MG_CARTAO_DISP]
+            mg_cartao_total = pd.to_numeric(self.df[COL_MG_CARTAO_TOTAL], errors='coerce').fillna(0)
+            mg_cartao_disp = pd.to_numeric(self.df[COL_MG_CARTAO_DISP], errors='coerce').fillna(0)
+            margem_cartao_usada = mg_cartao_total - mg_cartao_disp
             df_usou_cartao = self.df.loc[margem_cartao_usada > 0]
             if not df_usou_cartao.empty:
                 self.usou_cartao_matriculas = set(df_usou_cartao[COL_MATRICULA])
@@ -53,6 +56,13 @@ class FiltroHandler:
             self.df[COL_NOME_CLIENTE] = self.df[COL_NOME_CLIENTE].apply(lambda x: x.title() if isinstance(x, str) else x)
         if COL_CPF in self.df.columns:
             self.df[COL_CPF] = self.df[COL_CPF].str.replace(r"[.-]", "", regex=True)
+            
+        # <<< CORREÇÃO: Garante que as colunas de margem são numéricas antes de filtrar >>>
+        if COL_MG_EMPRESTIMO_DISP in self.df.columns:
+            self.df[COL_MG_EMPRESTIMO_DISP] = pd.to_numeric(self.df[COL_MG_EMPRESTIMO_DISP], errors='coerce').fillna(0)
+        if COL_MG_COMPULSORIA_DISP in self.df.columns:
+            self.df[COL_MG_COMPULSORIA_DISP] = pd.to_numeric(self.df[COL_MG_COMPULSORIA_DISP], errors='coerce').fillna(0)
+
 
         # Filtros de Exclusão Globais
         if self.config.selecao_lotacao and COL_LOTACAO in self.df.columns:
@@ -73,16 +83,17 @@ class FiltroHandler:
             self.df = self.df.dropna(subset=[COL_DATA_NASCIMENTO])
             self.df = self.df[self.df[COL_DATA_NASCIMENTO].dt.date >= self.config.data_limite]
 
+        # Filtro por margem mínima (agora sobre uma coluna garantidamente numérica)
+        self.df = self.df.loc[self.df[COL_MG_EMPRESTIMO_DISP] >= self.config.margem_emprestimo_limite]
+        
         # Outros filtros específicos de convênios que se aplicam a todos os produtos
         if self.config.convenio == 'govsp':
             self.df = self.df[self.df[COL_LOTACAO] != "ALESP"] # Remove ALESP
-            if COL_MG_EMPRESTIMO_DISP in self.df.columns:
-                negativos = self.df.loc[self.df[COL_MG_EMPRESTIMO_DISP] < 0]
-                if not negativos.empty: self.df = self.df.loc[~self.df[COL_MATRICULA].isin(negativos[COL_MATRICULA])]
+            negativos = self.df.loc[self.df[COL_MG_EMPRESTIMO_DISP] < 0]
+            if not negativos.empty: self.df = self.df.loc[~self.df[COL_MATRICULA].isin(negativos[COL_MATRICULA])]
         
         elif self.config.convenio == 'govmt':
-            if COL_MG_COMPULSORIA_DISP in self.df.columns:
-                self.df = self.df.loc[self.df[COL_MG_COMPULSORIA_DISP] >= 0]
+            self.df = self.df.loc[self.df[COL_MG_COMPULSORIA_DISP] >= 0]
     
     def _post_processamento(self):
         """
@@ -91,9 +102,9 @@ class FiltroHandler:
         """
         # Verificação final contra a lista de uso prévio do GOVSP
         if self.config.convenio == 'govsp':
-            if 'valor_liberado_beneficio' in self.df.columns:
+            if 'valor_liberado_beneficio' in self.df.columns and self.usou_beneficio_matriculas:
                 self.df.loc[self.df[COL_MATRICULA].isin(self.usou_beneficio_matriculas), 'valor_liberado_beneficio'] = 0
-            if 'valor_liberado_cartao' in self.df.columns:
+            if 'valor_liberado_cartao' in self.df.columns and self.usou_cartao_matriculas:
                 self.df.loc[self.df[COL_MATRICULA].isin(self.usou_cartao_matriculas), 'valor_liberado_cartao'] = 0
         
         # O resto do pós-processamento
