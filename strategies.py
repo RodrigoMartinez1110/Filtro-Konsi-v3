@@ -20,7 +20,6 @@ class FiltroStrategy(ABC):
     def _get_mask(self, banco_cfg: BancoConfig, tratado_col: str):
         """Cria a máscara de condição para aplicar as regras do banco."""
         if banco_cfg.coluna_condicional != "Aplicar a toda a base":
-            # Escapa o valor condicional para uso em regex
             safe_valor = re.escape(str(banco_cfg.valor_condicional))
             return (self.df[banco_cfg.coluna_condicional].str.contains(safe_valor, na=False, case=False)) & (~self.df[tratado_col])
         else:
@@ -49,13 +48,16 @@ class NovoStrategy(FiltroStrategy):
 
 class BeneficioStrategy(FiltroStrategy):
     def aplicar_regras_especificas(self) -> pd.DataFrame:
-        # Lógica de especificidade de convênio
-        if self.config.convenio == 'govsp':
-            self.df = self.df[self.df[COL_LOTACAO] != "ALESP"]
-            self.df = self.df.loc[self.df[COL_MG_BENEFICIO_SAQUE_DISP] == self.df[COL_MG_BENEFICIO_SAQUE_TOTAL]]
+        usou_beneficio = pd.Series(dtype='object')
         
+        # <<< LÓGICA GOVSP REINTRODUZIDA >>>
+        if self.config.convenio == 'govsp':
+            self.df['margem_beneficio_usado'] = self.df[COL_MG_BENEFICIO_SAQUE_TOTAL] - self.df[COL_MG_BENEFICIO_SAQUE_DISP]
+            usou_beneficio = self.df.loc[self.df['margem_beneficio_usado'] > 0]
+            self.df = self.df.loc[self.df[COL_MG_BENEFICIO_SAQUE_DISP] == self.df[COL_MG_BENEFICIO_SAQUE_TOTAL]]
+
         conv_excluidos = ['prefrj', 'govpi', 'goval', 'govce']
-        if self.config.convenio not in conv_excluidos:
+        if self.config.convenio not in conv_excluidos and self.config.convenio != 'govsp':
             self.df = self.df.loc[self.df[COL_MG_BENEFICIO_SAQUE_DISP] == self.df[COL_MG_BENEFICIO_SAQUE_TOTAL]]
 
         self.df['tratado'] = False
@@ -63,21 +65,13 @@ class BeneficioStrategy(FiltroStrategy):
         for config_banco in self.config.bancos_config:
             mask = self._get_mask(config_banco, 'tratado')
             
-            # Lógica centralizada de coeficiente com margem de segurança
             eff_coef = config_banco.coeficiente * (config_banco.margem_seguranca or 1.0)
-            eff_coef2 = config_banco.coeficiente2 * (config_banco.margem_seguranca or 1.0) if config_banco.coeficiente2 else None
-
-            # Lógica por convênio
-            if self.config.convenio == 'goval':
-                cond_goval = (self.df[COL_MG_BENEFICIO_SAQUE_DISP] == self.df[COL_MG_BENEFICIO_SAQUE_TOTAL]) & \
-                             (self.df[COL_MG_BENEFICIO_COMPRA_DISP] == self.df[COL_MG_BENEFICIO_COMPRA_TOTAL])
-                
-                margem_total = self.df[COL_MG_BENEFICIO_SAQUE_DISP] + self.df[COL_MG_BENEFICIO_COMPRA_DISP]
-                self.df.loc[mask & cond_goval, 'valor_liberado_beneficio'] = (margem_total * eff_coef).round(2)
-                self.df.loc[mask & ~cond_goval, 'valor_liberado_beneficio'] = (self.df[COL_MG_BENEFICIO_SAQUE_DISP] * eff_coef2).round(2) if eff_coef2 else 0
-
-            else: # Lógica para outros convênios (simplificada, pode adicionar mais casos)
-                 self.df.loc[mask, 'valor_liberado_beneficio'] = (self.df.loc[mask, COL_MG_BENEFICIO_SAQUE_DISP] * eff_coef).round(2)
+            
+            self.df.loc[mask, 'valor_liberado_beneficio'] = (self.df.loc[mask, COL_MG_BENEFICIO_SAQUE_DISP] * eff_coef).round(2)
+            
+            # <<< VALIDAÇÃO GOVSP REINTRODUZIDA >>>
+            if self.config.convenio == 'govsp' and not usou_beneficio.empty:
+                self.df.loc[(self.df['valor_liberado_beneficio'] > 0) & (self.df[COL_MATRICULA].isin(usou_beneficio[COL_MATRICULA])), 'valor_liberado_beneficio'] = 0
 
             self.df.loc[mask, 'valor_parcela_beneficio'] = (self.df['valor_liberado_beneficio'] / config_banco.coeficiente_parcela).round(2) if config_banco.coeficiente_parcela else 0
             self.df.loc[mask, 'comissao_beneficio'] = (self.df['valor_liberado_beneficio'] * (config_banco.comissao / 100)).round(2)
@@ -92,13 +86,24 @@ class BeneficioStrategy(FiltroStrategy):
 
 class CartaoStrategy(FiltroStrategy):
     def aplicar_regras_especificas(self) -> pd.DataFrame:
-        # Filtro inicial específico da campanha
+        usou_cartao = pd.Series(dtype='object')
+
+        # <<< LÓGICA GOVSP REINTRODUZIDA >>>
+        if self.config.convenio == 'govsp':
+            self.df['margem_cartao_usada'] = self.df[COL_MG_CARTAO_TOTAL] - self.df[COL_MG_CARTAO_DISP]
+            usou_cartao = self.df.loc[self.df['margem_cartao_usada'] > 0]
+        
         self.df = self.df.loc[self.df[COL_MG_CARTAO_DISP] == self.df[COL_MG_CARTAO_TOTAL]]
 
         self.df['tratado'] = False
         for config_banco in self.config.bancos_config:
             mask = self._get_mask(config_banco, 'tratado')
             self.df.loc[mask, 'valor_liberado_cartao'] = (self.df.loc[mask, COL_MG_CARTAO_DISP] * config_banco.coeficiente).round(2)
+
+            # <<< VALIDAÇÃO GOVSP REINTRODUZIDA >>>
+            if self.config.convenio == 'govsp' and not usou_cartao.empty:
+                self.df.loc[(self.df['valor_liberado_cartao'] > 0) & (self.df[COL_MATRICULA].isin(usou_cartao[COL_MATRICULA])), 'valor_liberado_cartao'] = 0
+
             self.df.loc[mask, 'valor_parcela_cartao'] = (self.df['valor_liberado_cartao'] / config_banco.coeficiente_parcela).round(2) if config_banco.coeficiente_parcela else 0
             self.df.loc[mask, 'comissao_cartao'] = (self.df['valor_liberado_cartao'] * (config_banco.comissao / 100)).round(2)
             self.df.loc[mask, 'banco_cartao'] = config_banco.banco
@@ -111,6 +116,17 @@ class CartaoStrategy(FiltroStrategy):
 
 class BeneficioECartaoStrategy(FiltroStrategy):
     def aplicar_regras_especificas(self) -> pd.DataFrame:
+        usou_beneficio = pd.Series(dtype='object')
+        usou_cartao = pd.Series(dtype='object')
+
+        # <<< LÓGICA GOVSP REINTRODUZIDA >>>
+        if self.config.convenio == 'govsp':
+            self.df['margem_beneficio_usado'] = self.df[COL_MG_BENEFICIO_SAQUE_TOTAL] - self.df[COL_MG_BENEFICIO_SAQUE_DISP]
+            usou_beneficio = self.df.loc[self.df['margem_beneficio_usado'] > 0]
+            
+            self.df['margem_cartao_usada'] = self.df[COL_MG_CARTAO_TOTAL] - self.df[COL_MG_CARTAO_DISP]
+            usou_cartao = self.df.loc[self.df['margem_cartao_usada'] > 0]
+
         self.df['tratado_beneficio'] = False
         self.df['tratado_cartao'] = False
         self.df['valor_liberado_beneficio'] = 0.0
@@ -122,14 +138,24 @@ class BeneficioECartaoStrategy(FiltroStrategy):
             if config_banco.cartao_escolhido == 'Benefício':
                 mask = self._get_mask(config_banco, 'tratado_beneficio')
                 # Adicionar lógica de cálculo para benefício aqui
+                self.df.loc[mask & (self.df[COL_MG_BENEFICIO_SAQUE_DISP] == self.df[COL_MG_BENEFICIO_SAQUE_TOTAL]), 'valor_liberado_beneficio'] = (self.df[COL_MG_BENEFICIO_SAQUE_DISP] * config_banco.coeficiente).round(2)
+                
+                # <<< VALIDAÇÃO GOVSP REINTRODUZIDA >>>
+                if self.config.convenio == 'govsp' and not usou_beneficio.empty:
+                    self.df.loc[self.df[COL_MATRICULA].isin(usou_beneficio[COL_MATRICULA]), 'valor_liberado_beneficio'] = 0
+
+                self.df.loc[mask, 'comissao_beneficio'] = (self.df['valor_liberado_beneficio'] * (config_banco.comissao / 100)).round(2)
                 self.df.loc[mask, 'tratado_beneficio'] = True
+
             elif config_banco.cartao_escolhido == 'Consignado':
-                mask = self._get_mask(config_banco, 'tratado_cartao')
-                # Adicionar lógica de cálculo para cartão consignado aqui
-                self.df.loc[mask, 'valor_liberado_cartao'] = (self.df.loc[mask, COL_MG_CARTAO_DISP] * config_banco.coeficiente).round(2)
+                mask = self._get_mask(config_banc, 'tratado_cartao')
+                self.df.loc[mask & (self.df[COL_MG_CARTAO_DISP] == self.df[COL_MG_CARTAO_TOTAL]), 'valor_liberado_cartao'] = (self.df[COL_MG_CARTAO_DISP] * config_banco.coeficiente).round(2)
+                
+                # <<< VALIDAÇÃO GOVSP REINTRODUZIDA >>>
+                if self.config.convenio == 'govsp' and not usou_cartao.empty:
+                    self.df.loc[self.df[COL_MATRICULA].isin(usou_cartao[COL_MATRICULA]), 'valor_liberado_cartao'] = 0
+                
                 self.df.loc[mask, 'comissao_cartao'] = (self.df['valor_liberado_cartao'] * (config_banco.comissao / 100)).round(2)
-                self.df.loc[mask, 'banco_cartao'] = config_banco.banco
-                self.df.loc[mask, 'prazo_cartao'] = str(config_banco.parcelas)
                 self.df.loc[mask, 'tratado_cartao'] = True
         
         self.df['comissao_total'] = self.df['comissao_beneficio'] + self.df['comissao_cartao']
